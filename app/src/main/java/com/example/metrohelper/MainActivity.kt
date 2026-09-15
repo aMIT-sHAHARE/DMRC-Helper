@@ -42,6 +42,7 @@ import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.ConfirmationNumber
+import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LocalParking
 import androidx.compose.material.icons.filled.LocationOn
@@ -236,6 +237,7 @@ fun NavigationGraph(navController: NavHostController) {
         composable("booktickets") { BookTicketsScreen() }
         composable("availableparkings") { AvailableParkingsScreen() }
         composable("aboutapp") { AboutAppScreen() }
+        composable("faq") { FaqScreen() }
     }
 
 }
@@ -482,7 +484,7 @@ fun DashboardHomeScreen(navController: NavHostController) {
                 columns = GridCells.Fixed(2),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(520.dp),
+                    .height(660.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 userScrollEnabled = false
@@ -519,6 +521,12 @@ fun DashboardHomeScreen(navController: NavHostController) {
                 item {
                     DashboardNavCard("Parking", Icons.Default.LocalParking) {
                         navController.navigate("availableparkings")
+                    }
+                }
+
+                item {
+                    DashboardNavCard("FAQ", Icons.AutoMirrored.Filled.HelpOutline) {
+                        navController.navigate("faq")
                     }
                 }
             }
