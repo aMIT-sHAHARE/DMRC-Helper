@@ -22,7 +22,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -34,21 +34,29 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalanceWallet
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.ConfirmationNumber
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LocalParking
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Map
+import androidx.compose.material.icons.filled.MyLocation
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Subway
 import androidx.compose.material.icons.filled.Train
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -80,7 +88,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.app.ActivityCompat
-import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -88,7 +95,12 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.example.metrohelper.ui.theme.MetroHelperTheme
 import com.google.android.gms.common.api.ResolvableApiException
+import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.LocationSettingsRequest
+import com.google.android.gms.location.Priority
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONArray
@@ -98,11 +110,7 @@ import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.Polyline
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import org.osmdroid.tileprovider.tilesource.TileSourceFactory
-import com.google.android.gms.location.*
-
+import org.osmdroid.tileprovider.tilesource.XYTileSource
 data class DashboardItem(
     val title: String,
     val icon: androidx.compose.ui.graphics.vector.ImageVector
@@ -129,18 +137,30 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        Configuration.getInstance().load(
+        // OSMDroid configuration
+        val osmdroidConfig = Configuration.getInstance()
+
+        osmdroidConfig.load(
             applicationContext,
             getSharedPreferences("osmdroid", MODE_PRIVATE)
         )
-        Configuration.getInstance().userAgentValue = packageName
 
+        osmdroidConfig.userAgentValue =
+            "DMRCHelper/1.0 (contact: thegtofficial22@gmail.com)"
+
+// Keep downloaded map tiles cached locally
+        osmdroidConfig.tileFileSystemCacheMaxBytes =
+            100L * 1024L * 1024L
+
+        osmdroidConfig.tileFileSystemCacheTrimBytes =
+            80L * 1024L * 1024L
+
+        // Request location permission
         if (ActivityCompat.checkSelfPermission(
                 this,
                 Manifest.permission.ACCESS_FINE_LOCATION
             ) != PackageManager.PERMISSION_GRANTED
         ) {
-
             ActivityCompat.requestPermissions(
                 this,
                 arrayOf(Manifest.permission.ACCESS_FINE_LOCATION),
@@ -172,6 +192,7 @@ fun MetroApp() {
 
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0,0,0,0),
         topBar = {
             TopAppBar(
                 title = { Text("DMRC Helper") },
@@ -180,13 +201,16 @@ fun MetroApp() {
                     titleContentColor = Color.White
                 )
             )
-
-        },
-        bottomBar = {
-            BottomNavigationBar(navController, items)
         }
     ) { innerPadding ->
-        Box(Modifier.padding(innerPadding)) {
+
+        Box(
+            modifier = Modifier
+                .padding(
+                    top = innerPadding.calculateTopPadding()
+                )
+                .fillMaxSize()
+        ) {
             NavigationGraph(navController)
         }
     }
@@ -198,105 +222,13 @@ data class BottomNavItem(
     val icon: androidx.compose.ui.graphics.vector.ImageVector
 )
 
-@Composable
-fun BottomNavigationBar(
-    navController: NavHostController,
-    items: List<BottomNavItem>
-) {
-
-    val currentRoute = currentRoute(navController)
-
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(90.dp),
-        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 12.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = Color.White
-        )
-    ) {
-
-        Row(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 8.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-
-            items.forEach { item ->
-
-                val selected = currentRoute == item.route
-
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight()          // ✅ Use full height
-                        .clickable {
-                            navController.navigate(item.route) {
-                                popUpTo(navController.graph.findStartDestination().id) {
-                                    saveState = true
-                                }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
-                        },
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center   // ✅ Center vertically
-                ) {
-
-
-                Icon(
-                        imageVector = item.icon,
-                        contentDescription = item.title,
-                        tint = if (selected)
-                            Color(0xFFD32F2F)
-                        else
-                            Color.Gray,
-                        modifier = Modifier.size(26.dp)
-                    )
-
-                    Spacer(modifier = Modifier.height(4.dp))
-
-                    Text(
-                        text = item.title,
-                        fontSize = 11.sp,
-                        fontWeight = if (selected)
-                            FontWeight.Bold
-                        else
-                            FontWeight.Normal,
-                        color = if (selected)
-                            Color(0xFFD32F2F)
-                        else
-                            Color.Gray
-                    )
-
-                    // Indicator
-                    if (selected) {
-                        Spacer(modifier = Modifier.height(4.dp))
-
-                        Box(
-                            modifier = Modifier
-                                .width(20.dp)
-                                .height(3.dp)
-                                .background(
-                                    Color(0xFFD32F2F),
-                                    RoundedCornerShape(50)
-                                )
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
 
 @Composable
 fun NavigationGraph(navController: NavHostController) {
-    NavHost(navController, startDestination = "metromap") {
+    NavHost(navController, startDestination = "dashboard") {
 
+        composable("routeplanner") { RoutePlannerScreen() }
+        composable("dashboard") { DashboardHomeScreen(navController) }
         composable("metromap") { MetroMapScreen() }
 
         composable("neareststation") { NearestStationScreen() } // ✅ NEW
@@ -308,6 +240,370 @@ fun NavigationGraph(navController: NavHostController) {
 
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun RoutePlannerScreen() {
+
+    val context = LocalContext.current
+    val stations = remember { loadMetroStations(context) }
+
+    var from by remember { mutableStateOf("") }
+    var to by remember { mutableStateOf("") }
+
+    var expandedFrom by remember { mutableStateOf(false) }
+    var expandedTo by remember { mutableStateOf(false) }
+
+    var result by remember { mutableStateOf("") }
+
+    val filteredFrom = stations.filter {
+        it.name.contains(from, ignoreCase = true)
+    }
+
+    val filteredTo = stations.filter {
+        it.name.contains(to, ignoreCase = true)
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp)
+    ) {
+
+        Text(
+            text = "Metro Route Planner",
+            fontSize = 26.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color(0xFFD32F2F)
+        )
+
+        Spacer(modifier = Modifier.height(18.dp))
+
+        // FROM
+        ExposedDropdownMenuBox(
+            expanded = expandedFrom,
+            onExpandedChange = { expandedFrom = !expandedFrom }
+        ) {
+
+            OutlinedTextField(
+                value = from,
+                onValueChange = {
+                    from = it
+                    expandedFrom = true
+                },
+                label = { Text("From Station") },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .menuAnchor()
+            )
+
+            ExposedDropdownMenu(
+                expanded = expandedFrom,
+                onDismissRequest = { expandedFrom = false }
+            ) {
+
+                filteredFrom.take(8).forEach { station ->
+
+                    DropdownMenuItem(
+                        text = { Text(station.name) },
+                        onClick = {
+                            from = station.name
+                            expandedFrom = false
+                        }
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // TO
+        ExposedDropdownMenuBox(
+            expanded = expandedTo,
+            onExpandedChange = { expandedTo = !expandedTo }
+        ) {
+
+            OutlinedTextField(
+                value = to,
+                onValueChange = {
+                    to = it
+                    expandedTo = true
+                },
+                label = { Text("To Station") },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .menuAnchor()
+            )
+
+            ExposedDropdownMenu(
+                expanded = expandedTo,
+                onDismissRequest = { expandedTo = false }
+            ) {
+
+                filteredTo.take(8).forEach { station ->
+
+                    DropdownMenuItem(
+                        text = { Text(station.name) },
+                        onClick = {
+                            to = station.name
+                            expandedTo = false
+                        }
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Button(
+            onClick = {
+
+                val start = stations.find { it.name == from }
+                val end = stations.find { it.name == to }
+
+                if (start != null && end != null) {
+
+                    val distance = calculateDistance(
+                        start.lat,
+                        start.lon,
+                        end.lat,
+                        end.lon
+                    )
+
+                    val time = (distance * 3).toInt()
+                    val fare = (distance * 2).toInt()
+
+                    result =
+                        "Distance: %.1f km\nEstimated Time: $time mins\nFare: ₹$fare"
+                            .format(distance)
+
+                } else {
+                    result = "Please select valid stations"
+                }
+            },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Find Route")
+        }
+
+        Spacer(modifier = Modifier.height(20.dp))
+
+        Text(
+            text = result,
+            fontSize = 18.sp
+        )
+    }
+}
+
+@Composable
+fun DashboardHomeScreen(navController: NavHostController) {
+
+    val context = LocalContext.current
+    val prefs = context.getSharedPreferences("metro_stats", Context.MODE_PRIVATE)
+
+    val hour = remember { java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY) }
+    val day = remember { java.util.Calendar.getInstance().get(java.util.Calendar.DAY_OF_WEEK) }
+
+    // Fake stats for now
+    val trips = prefs.getInt("trips", 8)
+    val savings = trips * 25
+
+    val bestTime = when {
+        hour in 8..10 -> "Rush Hour"
+        hour in 18..20 -> "Heavy Rush "
+        hour in 11..16 -> "Perfect Time To Leave"
+        else -> "Good Time To Travel"
+    }
+
+    val crowd = when {
+        hour in 8..10 -> "Very High"
+        hour in 18..20 -> "High"
+        hour in 11..16 -> "Low"
+        else -> "Medium"
+    }
+
+    val suggestion = when {
+        day == java.util.Calendar.SUNDAY ->
+            "Weekend travel is smooth today"
+
+        hour < 8 ->
+            "Leave now to avoid rush"
+
+        hour in 8..10 ->
+            "Use less crowded coach"
+
+        else ->
+            "Metro is best option now"
+    }
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFFF8F8F8))
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+
+        item {
+            Text(
+                text = "Smart Metro Dashboard",
+                fontSize = 28.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFFD32F2F)
+            )
+        }
+
+        item {
+            Text(
+                text = "Live travel intelligence",
+                color = Color.Gray
+            )
+        }
+
+        item { SmartCard("⏰ Best Time To Leave", bestTime) }
+
+        item { SmartCard("📈 Crowd Level", crowd) }
+
+        item { SmartCard("💡 Smart Advice", suggestion) }
+
+        item { SmartCard("💰 Weekly Savings", "₹$savings saved") }
+
+        item { SmartCard("🚇 Trips This Week", "$trips trips completed") }
+
+        item {
+            Text(
+                text = "Utilities",
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+
+        item {
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(2),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(520.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                userScrollEnabled = false
+            ){
+
+
+                item {
+                    DashboardNavCard("Metro Map", Icons.Default.Map) {
+                        navController.navigate("metromap")
+                    }
+                }
+
+                item {
+                    DashboardNavCard("Nearby", Icons.Default.LocationOn) {
+                        navController.navigate("neareststation")
+                    }
+                }
+
+                item {
+                    DashboardNavCard("Tickets", Icons.Default.ConfirmationNumber) {
+                        navController.navigate("booktickets")
+                    }
+                }
+                item { DashboardNavCard("Route Planner", Icons.Default.Subway) {
+                    navController.navigate("routeplanner")
+                    }
+                }
+                item {
+                    DashboardNavCard("About App", Icons.Default.Info) {
+                        navController.navigate("aboutapp")
+                    }
+                }
+
+                item {
+                    DashboardNavCard("Parking", Icons.Default.LocalParking) {
+                        navController.navigate("availableparkings")
+                    }
+                }
+            }
+        }
+
+        item { Spacer(modifier = Modifier.height(20.dp)) }
+    }
+}
+
+@Composable
+fun SmartCard(title: String, value: String) {
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 6.dp),
+        elevation = CardDefaults.cardElevation(6.dp),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color.White
+        )
+    ) {
+
+        Column(
+            modifier = Modifier.padding(16.dp)
+        ) {
+
+            Text(
+                text = title,
+                color = Color.Gray,
+                fontSize = 14.sp
+            )
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            Text(
+                text = value,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFFD32F2F)
+            )
+        }
+    }
+}
+
+@Composable
+fun DashboardNavCard(
+    title: String,
+    icon: ImageVector,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(140.dp)
+            .clickable { onClick() },
+        elevation = CardDefaults.cardElevation(8.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color.White
+        ),
+        shape = RoundedCornerShape(18.dp)
+    ) {
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+
+            Icon(
+                imageVector = icon,
+                contentDescription = title,
+                tint = Color(0xFFD32F2F),
+                modifier = Modifier.size(48.dp)
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Text(
+                title,
+                fontWeight = FontWeight.Bold,
+                fontSize = 16.sp
+            )
+        }
+    }
+}
 @Composable
 fun MetroMapScreen() {
 
@@ -508,18 +804,29 @@ fun checkLocationEnabled(activity: Activity, onEnabled: () -> Unit) {
 @SuppressLint("MissingPermission")
 @Composable
 fun NearestStationScreen() {
+
     val context = LocalContext.current
     val activity = context as Activity
-    var userLocation by remember { mutableStateOf<GeoPoint?>(null) }
+
+    var userLocation by remember {
+        mutableStateOf<GeoPoint?>(null)
+    }
+
     var nearestStation by remember { mutableStateOf<MetroStation?>(null) }
     var routePoints by remember { mutableStateOf<List<GeoPoint>>(emptyList()) }
+    var mapViewRef by remember { mutableStateOf<MapView?>(null) }
 
     val fusedLocationClient =
         LocationServices.getFusedLocationProviderClient(context)
 
-    val stations = remember { loadMetroStations(context) }
+    val stations = remember {
+        loadMetroStations(context)
+    }
 
-    //---- GET USER LOCATION
+    // -----------------------------------------
+    // GET USER LOCATION
+    // -----------------------------------------
+
     LaunchedEffect(Unit) {
 
         checkLocationEnabled(activity) {
@@ -531,22 +838,33 @@ fun NearestStationScreen() {
 
                 location?.let {
 
-                    userLocation = GeoPoint(it.latitude, it.longitude)
+                    userLocation =
+                        GeoPoint(
+                            it.latitude,
+                            it.longitude
+                        )
 
-                    nearestStation = findNearestStation(
-                        it.latitude,
-                        it.longitude,
-                        stations
-                    )
+                    nearestStation =
+                        findNearestStation(
+                            it.latitude,
+                            it.longitude,
+                            stations
+                        )
                 }
             }
         }
     }
 
-    //----- GET ROUTE AFTER LOCATION + STATION ARE KNOWN
+    // -----------------------------------------
+    // GET ROUTE
+    // -----------------------------------------
+
     LaunchedEffect(userLocation, nearestStation) {
 
-        if (userLocation != null && nearestStation != null) {
+        if (
+            userLocation != null &&
+            nearestStation != null
+        ) {
 
             routePoints = getRoute(
                 userLocation!!.latitude,
@@ -556,85 +874,479 @@ fun NearestStationScreen() {
             )
         }
     }
+    // -----------------------------------------
+// CENTER MAP AUTOMATICALLY ON USER LOCATION
+// -----------------------------------------
 
-    //--- UI
-    Column(Modifier.fillMaxSize()) {
+    LaunchedEffect(userLocation, mapViewRef) {
 
-        nearestStation?.let {
+        val location = userLocation
+        val map = mapViewRef
 
-            Text(
-                text = "Nearest Station: ${it.name}",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(10.dp)
-            )
+        if (location != null && map != null) {
+
+            map.post {
+
+                map.controller.setZoom(15.5)
+
+                map.controller.animateTo(location)
+
+                map.invalidate()
+            }
         }
+    }
+
+    // -----------------------------------------
+    // DISTANCE
+    // -----------------------------------------
+
+    val distance = if (
+        userLocation != null &&
+        nearestStation != null
+    ) {
+
+        calculateDistance(
+            userLocation!!.latitude,
+            userLocation!!.longitude,
+            nearestStation!!.lat,
+            nearestStation!!.lon
+        )
+
+    } else {
+        0f
+    }
+
+    val estimatedTime =
+        (distance * 12).toInt()
+
+// -----------------------------------------
+// MAP UI
+// -----------------------------------------
+
+
+
+    Box(
+        modifier = Modifier.fillMaxSize()
+    ) {
+        ->
+
+        // =====================================
+        // MAP
+        // =====================================
 
         AndroidView(
             modifier = Modifier.fillMaxSize(),
 
             factory = { ctx ->
 
-                val mapView = MapView(ctx)
+                MapView(ctx).apply {
 
-                mapView.setTileSource(TileSourceFactory.MAPNIK)
+                    mapViewRef = this
 
-                mapView.setMultiTouchControls(true)
+                    val mapnikTileSource = XYTileSource(
+                        "OpenStreetMap",
+                        0,
+                        19,
+                        256,
+                        ".png",
+                        arrayOf(
+                            "https://tile.openstreetmap.org/"
+                        )
+                    )
 
-                mapView.controller.setZoom(15.0)
+                    setTileSource(mapnikTileSource)
 
-                mapView
+                    setMultiTouchControls(true)
+
+                    controller.setZoom(15.5)
+                }
             },
 
             update = { mapView ->
 
                 mapView.overlays.clear()
 
-                userLocation?.let { userPoint ->
+                // =================================
+                // USER LOCATION
+                // =================================
 
-                    mapView.controller.setCenter(userPoint)
+                userLocation?.let { userPoint ->
 
                     val userMarker = Marker(mapView)
 
                     userMarker.position = userPoint
+
                     userMarker.title = "You are here"
 
                     mapView.overlays.add(userMarker)
                 }
 
+                // =================================
+                // NEAREST STATION
+                // =================================
+
                 nearestStation?.let { station ->
 
-                    val stationPoint =
-                        GeoPoint(station.lat, station.lon)
+                    val stationPoint = GeoPoint(
+                        station.lat,
+                        station.lon
+                    )
 
                     val stationMarker = Marker(mapView)
 
                     stationMarker.position = stationPoint
+
                     stationMarker.title = station.name
 
                     mapView.overlays.add(stationMarker)
                 }
 
+                // =================================
+                // ROUTE
+                // =================================
+
                 if (routePoints.isNotEmpty()) {
 
-                    val polyline = Polyline()
+                    // Outer border
+                    val routeBorder = Polyline()
 
-                    polyline.setPoints(routePoints)
+                    routeBorder.setPoints(routePoints)
 
-                    polyline.outlinePaint.color =
-                        android.graphics.Color.BLUE
+                    routeBorder.outlinePaint.color =
+                        android.graphics.Color.WHITE
 
-                    polyline.outlinePaint.strokeWidth = 8f
+                    routeBorder.outlinePaint.strokeWidth = 14f
 
-                    mapView.overlays.add(polyline)
+                    mapView.overlays.add(routeBorder)
+
+                    // Main blue route
+                    val route = Polyline()
+
+                    route.setPoints(routePoints)
+
+                    route.outlinePaint.color =
+                        android.graphics.Color.rgb(
+                            33,
+                            150,
+                            243
+                        )
+
+                    route.outlinePaint.strokeWidth = 8f
+
+                    mapView.overlays.add(route)
                 }
 
                 mapView.invalidate()
             }
         )
+
+        // =====================================
+        // OSM ATTRIBUTION
+        // =====================================
+        Text(
+            text = "© OpenStreetMap contributors",
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .padding(
+                    start = 12.dp,
+                    bottom = 155.dp
+                ),
+            fontSize = 10.sp,
+            color = Color.DarkGray
+        )
+
+        // =====================================
+        // TOP HEADER
+        // =====================================
+
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(
+                    start = 16.dp,
+                    end = 16.dp,
+                    top = 12.dp
+                )
+                .height(92.dp),
+
+            shape = RoundedCornerShape(22.dp),
+
+            elevation = CardDefaults.cardElevation(
+                defaultElevation = 8.dp
+            ),
+
+            colors = CardDefaults.cardColors(
+                containerColor = Color.White.copy(
+                    alpha = 0.94f
+                )
+            )
+        ) {
+
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(
+                        horizontal = 18.dp
+                    ),
+
+                verticalAlignment =
+                    Alignment.CenterVertically
+            ) {
+
+                Text(
+                    text = "🚇",
+                    fontSize = 32.sp
+                )
+
+                Spacer(
+                    modifier = Modifier.width(12.dp)
+                )
+
+                Column {
+
+                    Text(
+                        text = "Nearby Metro",
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFD32F2F)
+                    )
+
+                    Text(
+                        text = "Finding the best station for you",
+                        fontSize = 12.sp,
+                        color = Color.Gray
+                    )
+                }
+            }
+        }
+
+
+        // =====================================
+        // ZOOM CONTROLS
+        // =====================================
+
+        Column(
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .padding(
+                    end = 14.dp
+                )
+        ) {
+
+            FloatingMapButton(
+                modifier = Modifier.size(48.dp),
+                icon = Icons.Default.Add
+            ) {
+
+                mapViewRef?.controller?.zoomIn()
+            }
+
+            Spacer(
+                modifier = Modifier.height(8.dp)
+            )
+
+            FloatingMapButton(
+                modifier = Modifier.size(48.dp),
+                icon = Icons.Default.Remove
+            ) {
+
+                mapViewRef?.controller?.zoomOut()
+            }
+        }
+
+
+        // =====================================
+        // LOCATE ME
+        // =====================================
+
+        FloatingMapButton(
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(
+                    end = 14.dp,
+                    bottom = 205.dp
+                )
+                .size(48.dp),
+
+            icon = Icons.Default.MyLocation
+
+        ) {
+
+            userLocation?.let { point ->
+
+                mapViewRef?.controller?.animateTo(
+                    point
+                )
+
+                mapViewRef?.controller?.setZoom(
+                    16.5
+                )
+            }
+        }
+
+
+        // =====================================
+        // BOTTOM STATION CARD
+        // =====================================
+
+        nearestStation?.let { station ->
+
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(
+                        start = 16.dp,
+                        end = 16.dp,
+                        bottom = 12.dp
+                    )
+                    .align(Alignment.BottomCenter),
+
+                shape = RoundedCornerShape(24.dp),
+
+                elevation = CardDefaults.cardElevation(
+                    defaultElevation = 10.dp
+                ),
+
+                colors = CardDefaults.cardColors(
+                    containerColor = Color.White.copy(
+                        alpha = 0.97f
+                    )
+                )
+            ) {
+
+                Column(
+                    modifier = Modifier.padding(
+                        horizontal = 20.dp,
+                        vertical = 16.dp
+                    )
+                ) {
+
+                    // Station title
+                    Row(
+                        verticalAlignment =
+                            Alignment.CenterVertically
+                    ) {
+
+                        Icon(
+                            imageVector = Icons.Default.Subway,
+                            contentDescription = null,
+                            tint = Color(0xFFD32F2F),
+                            modifier = Modifier.size(34.dp)
+                        )
+
+                        Spacer(
+                            modifier = Modifier.width(10.dp)
+                        )
+
+                        Column {
+
+                            Text(
+                                text = "Nearest Metro Station",
+                                fontSize = 12.sp,
+                                color = Color.Gray
+                            )
+
+                            Text(
+                                text = station.name,
+                                fontSize = 20.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+
+                    Spacer(
+                        modifier = Modifier.height(12.dp)
+                    )
+
+                    // Distance + ETA
+                    Row(
+                        horizontalArrangement =
+                            Arrangement.spacedBy(10.dp)
+                    ) {
+
+                        InfoChip(
+                            "📍 %.1f km".format(distance)
+                        )
+
+                        InfoChip(
+                            "⏱ ~${estimatedTime} min"
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 
+@Composable
+fun FloatingMapButton(
+    modifier: Modifier = Modifier,
+    icon: ImageVector,
+    onClick: () -> Unit
+) {
+
+    Card(
+        modifier = modifier
+            .size(52.dp)
+            .clickable {
+                onClick()
+            },
+        shape = RoundedCornerShape(16.dp),
+        elevation =
+            CardDefaults.cardElevation(
+                8.dp
+            ),
+        colors =
+            CardDefaults.cardColors(
+                containerColor =
+                    Color.White
+            )
+    ) {
+
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment =
+                Alignment.Center
+        ) {
+
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint =
+                    Color(0xFFD32F2F),
+                modifier =
+                    Modifier.size(25.dp)
+            )
+        }
+    }
+}
+
+@Composable
+fun InfoChip(text: String) {
+
+    Card(
+        shape =
+            RoundedCornerShape(50.dp),
+        colors =
+            CardDefaults.cardColors(
+                containerColor =
+                    Color(0xFFF5F5F5)
+            )
+    ) {
+
+        Text(
+            text = text,
+            modifier =
+                Modifier.padding(
+                    horizontal = 12.dp,
+                    vertical = 7.dp
+                ),
+            fontSize = 13.sp,
+            fontWeight =
+                FontWeight.Medium
+        )
+    }
+}
 
 @Composable
 fun BookTicketsScreen() {
@@ -1020,7 +1732,77 @@ fun ParkingStationCard(station: ParkingStation) {
 
 @Composable
 fun AboutAppScreen() {
-    CenteredText("About App Screen ℹ️")
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(20.dp)
+            .verticalScroll(rememberScrollState()),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+
+        Icon(
+            imageVector = Icons.Default.Info,
+            contentDescription = null,
+            tint = Color(0xFFD32F2F),
+            modifier = Modifier.size(80.dp)
+        )
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Text(
+            "DMRC Helper",
+            fontSize = 28.sp,
+            fontWeight = FontWeight.Bold
+        )
+
+        Text(
+            "Smart Delhi Metro Assistant",
+            color = Color.Gray
+        )
+
+        Spacer(modifier = Modifier.height(20.dp))
+
+        Text(
+            "This app helps users navigate Delhi Metro using route planner, nearest station finder, metro map, ticket booking and parking assistance.",
+            textAlign = TextAlign.Center
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Text(
+            "Developed By",
+            fontWeight = FontWeight.Bold
+        )
+
+        Text("Harshit Verma")
+        Text("Devansh Jindal")
+        Text("Debanshu Mazumdar")
+        Text("Samarth Gupta")
+        Text("Abhay Pratab Singh")
+        Text("Amit Shahare")
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Text(
+            "Guided By",
+            fontWeight = FontWeight.Bold
+        )
+
+        Text("Mr. Munish Kumar")
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Text("Version 1.0")
+
+        Spacer(modifier = Modifier.height(20.dp))
+
+        Text(
+            "This is an academic project and not officially affiliated with DMRC.",
+            color = Color.Gray,
+            textAlign = TextAlign.Center
+        )
+    }
 }
 
 @Composable
@@ -1043,7 +1825,7 @@ fun DashboardGrid() {
         DashboardItem("Fare Calculator", Icons.Filled.AccountBalanceWallet)
     )
 
-    LazyVerticalGrid(columns = GridCells.Fixed(2)) {
+    LazyVerticalGrid(columns = GridCells.Adaptive(160.dp)) {
         items(items) { item -> DashboardCard(item) }
     }
 }

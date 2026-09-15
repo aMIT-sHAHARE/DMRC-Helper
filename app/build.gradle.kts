@@ -47,6 +47,7 @@ android {
 }
 
 dependencies {
+    implementation(libs.androidx.compose.foundation)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
@@ -86,7 +87,7 @@ dependencies {
         implementation("androidx.activity:activity-compose:1.9.3")
 
         // ---- OpenStreetMaps in-screen implementation
-        implementation("org.osmdroid:osmdroid-android:6.1.16")
+        implementation("org.osmdroid:osmdroid-android:6.1.18")
         implementation("com.google.android.gms:play-services-location:21.0.1")
 
         // --- Show route
