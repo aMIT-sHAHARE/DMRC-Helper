@@ -244,159 +244,159 @@ fun NavigationGraph(navController: NavHostController) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun RoutePlannerScreen() {
+//fun RoutePlannerScreen() {
+//
+//    val context = LocalContext.current
+//    val stations = remember { loadMetroStations(context) }
+//
+//    var from by remember { mutableStateOf("") }
+//    var to by remember { mutableStateOf("") }
+//
+//    var expandedFrom by remember { mutableStateOf(false) }
+//    var expandedTo by remember { mutableStateOf(false) }
+//
+//    var result by remember { mutableStateOf("") }
+//
+//    val filteredFrom = stations.filter {
+//        it.name.contains(from, ignoreCase = true)
+//    }
+//
+//    val filteredTo = stations.filter {
+//        it.name.contains(to, ignoreCase = true)
+//    }
+//
+//    Column(
+//        modifier = Modifier
+//            .fillMaxSize()
+//            .padding(16.dp)
+//    ) {
+//
+//        Text(
+//            text = "Metro Route Planner",
+//            fontSize = 26.sp,
+//            fontWeight = FontWeight.Bold,
+//            color = Color(0xFFD32F2F)
+//        )
+//
+//        Spacer(modifier = Modifier.height(18.dp))
+//
+//        // FROM
+//        ExposedDropdownMenuBox(
+//            expanded = expandedFrom,
+//            onExpandedChange = { expandedFrom = !expandedFrom }
+//        ) {
+//
+//            OutlinedTextField(
+//                value = from,
+//                onValueChange = {
+//                    from = it
+//                    expandedFrom = true
+//                },
+//                label = { Text("From Station") },
+//                modifier = Modifier
+//                    .fillMaxWidth()
+//                    .menuAnchor()
+//            )
+//
+//            ExposedDropdownMenu(
+//                expanded = expandedFrom,
+//                onDismissRequest = { expandedFrom = false }
+//            ) {
+//
+//                filteredFrom.take(8).forEach { station ->
+//
+//                    DropdownMenuItem(
+//                        text = { Text(station.name) },
+//                        onClick = {
+//                            from = station.name
+//                            expandedFrom = false
+//                        }
+//                    )
+//                }
+//            }
+//        }
+//
+//        Spacer(modifier = Modifier.height(12.dp))
+//
+//        // TO
+//        ExposedDropdownMenuBox(
+//            expanded = expandedTo,
+//            onExpandedChange = { expandedTo = !expandedTo }
+//        ) {
+//
+//            OutlinedTextField(
+//                value = to,
+//                onValueChange = {
+//                    to = it
+//                    expandedTo = true
+//                },
+//                label = { Text("To Station") },
+//                modifier = Modifier
+//                    .fillMaxWidth()
+//                    .menuAnchor()
+//            )
+//
+//            ExposedDropdownMenu(
+//                expanded = expandedTo,
+//                onDismissRequest = { expandedTo = false }
+//            ) {
+//
+//                filteredTo.take(8).forEach { station ->
+//
+//                    DropdownMenuItem(
+//                        text = { Text(station.name) },
+//                        onClick = {
+//                            to = station.name
+//                            expandedTo = false
+//                        }
+//                    )
+//                }
+//            }
+//        }
+//
+//        Spacer(modifier = Modifier.height(16.dp))
+//
+//        Button(
+//            onClick = {
+//
+//                val start = stations.find { it.name == from }
+//                val end = stations.find { it.name == to }
+//
+//                if (start != null && end != null) {
+//
+//                    val distance = calculateDistance(
+//                        start.lat,
+//                        start.lon,
+//                        end.lat,
+//                        end.lon
+//                    )
+//
+//                    val time = (distance * 3).toInt()
+//                    val fare = (distance * 2).toInt()
+//
+//                    result =
+//                        "Distance: %.1f km\nEstimated Time: $time mins\nFare: ₹$fare"
+//                            .format(distance)
+//
+//                } else {
+//                    result = "Please select valid stations"
+//                }
+//            },
+//            modifier = Modifier.fillMaxWidth()
+//        ) {
+//            Text("Find Route")
+//        }
+//
+//        Spacer(modifier = Modifier.height(20.dp))
+//
+//        Text(
+//            text = result,
+//            fontSize = 18.sp
+//        )
+//    }
+//}
 
-    val context = LocalContext.current
-    val stations = remember { loadMetroStations(context) }
-
-    var from by remember { mutableStateOf("") }
-    var to by remember { mutableStateOf("") }
-
-    var expandedFrom by remember { mutableStateOf(false) }
-    var expandedTo by remember { mutableStateOf(false) }
-
-    var result by remember { mutableStateOf("") }
-
-    val filteredFrom = stations.filter {
-        it.name.contains(from, ignoreCase = true)
-    }
-
-    val filteredTo = stations.filter {
-        it.name.contains(to, ignoreCase = true)
-    }
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp)
-    ) {
-
-        Text(
-            text = "Metro Route Planner",
-            fontSize = 26.sp,
-            fontWeight = FontWeight.Bold,
-            color = Color(0xFFD32F2F)
-        )
-
-        Spacer(modifier = Modifier.height(18.dp))
-
-        // FROM
-        ExposedDropdownMenuBox(
-            expanded = expandedFrom,
-            onExpandedChange = { expandedFrom = !expandedFrom }
-        ) {
-
-            OutlinedTextField(
-                value = from,
-                onValueChange = {
-                    from = it
-                    expandedFrom = true
-                },
-                label = { Text("From Station") },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .menuAnchor()
-            )
-
-            ExposedDropdownMenu(
-                expanded = expandedFrom,
-                onDismissRequest = { expandedFrom = false }
-            ) {
-
-                filteredFrom.take(8).forEach { station ->
-
-                    DropdownMenuItem(
-                        text = { Text(station.name) },
-                        onClick = {
-                            from = station.name
-                            expandedFrom = false
-                        }
-                    )
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        // TO
-        ExposedDropdownMenuBox(
-            expanded = expandedTo,
-            onExpandedChange = { expandedTo = !expandedTo }
-        ) {
-
-            OutlinedTextField(
-                value = to,
-                onValueChange = {
-                    to = it
-                    expandedTo = true
-                },
-                label = { Text("To Station") },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .menuAnchor()
-            )
-
-            ExposedDropdownMenu(
-                expanded = expandedTo,
-                onDismissRequest = { expandedTo = false }
-            ) {
-
-                filteredTo.take(8).forEach { station ->
-
-                    DropdownMenuItem(
-                        text = { Text(station.name) },
-                        onClick = {
-                            to = station.name
-                            expandedTo = false
-                        }
-                    )
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Button(
-            onClick = {
-
-                val start = stations.find { it.name == from }
-                val end = stations.find { it.name == to }
-
-                if (start != null && end != null) {
-
-                    val distance = calculateDistance(
-                        start.lat,
-                        start.lon,
-                        end.lat,
-                        end.lon
-                    )
-
-                    val time = (distance * 3).toInt()
-                    val fare = (distance * 2).toInt()
-
-                    result =
-                        "Distance: %.1f km\nEstimated Time: $time mins\nFare: ₹$fare"
-                            .format(distance)
-
-                } else {
-                    result = "Please select valid stations"
-                }
-            },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text("Find Route")
-        }
-
-        Spacer(modifier = Modifier.height(20.dp))
-
-        Text(
-            text = result,
-            fontSize = 18.sp
-        )
-    }
-}
-
-@Composable
+//@Composable
 fun DashboardHomeScreen(navController: NavHostController) {
 
     val context = LocalContext.current
@@ -510,7 +510,7 @@ fun DashboardHomeScreen(navController: NavHostController) {
                 }
                 item { DashboardNavCard("Route Planner", Icons.Default.Subway) {
                     navController.navigate("routeplanner")
-                    }
+                }
                 }
                 item {
                     DashboardNavCard("About App", Icons.Default.Info) {
@@ -1565,7 +1565,7 @@ fun AvailableParkingsScreen() {
         if (query.isBlank()) allStations
         else allStations.filter {
             it.station.contains(query, ignoreCase = true) ||
-                it.line.contains(query, ignoreCase = true)
+                    it.line.contains(query, ignoreCase = true)
         }
     }
 
